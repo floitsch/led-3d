@@ -5,12 +5,14 @@ export function orient(p,angles){return mv(mm(mm(rodrigues([0,0,angles[2]]),rodr
 export class Viewer {
   constructor(canvas){
     this.canvas=canvas;this.map=null;this.yaw=.35;this.pitch=-.15;this.angles=[0,0,0];this.effect='rainbow';this.speed=1;this.brightness=.7;this.showChain=true;
-    let last;
-    canvas.addEventListener('pointerdown',e=>{last=[e.clientX,e.clientY];canvas.setPointerCapture(e.pointerId);});
-    canvas.addEventListener('pointermove',e=>{if(last){this.yaw+=(e.clientX-last[0])*.01;this.pitch+=(e.clientY-last[1])*.01;last=[e.clientX,e.clientY];}});
-    const stop=()=>{last=null;};canvas.addEventListener('pointerup',stop);canvas.addEventListener('pointercancel',stop);
+    let last,pointer;
+    canvas.addEventListener('pointerdown',e=>{if(last)return;pointer=e.pointerId;last=[e.clientX,e.clientY];canvas.setPointerCapture(pointer);});
+    canvas.addEventListener('pointermove',e=>{if(last&&e.pointerId===pointer){this.rotateView((e.clientX-last[0])*.01,(e.clientY-last[1])*.01);last=[e.clientX,e.clientY];}});
+    const stop=e=>{if(e.pointerId===pointer)last=null;};canvas.addEventListener('pointerup',stop);canvas.addEventListener('pointercancel',stop);canvas.addEventListener('lostpointercapture',stop);
     const draw=time=>{this.draw(time/1000);requestAnimationFrame(draw);};requestAnimationFrame(draw);
   }
+  resetView(){this.yaw=.35;this.pitch=-.15;}
+  rotateView(yaw,pitch){this.yaw+=yaw;this.pitch+=pitch;}
   draw(time){
     const canvas=this.canvas,rect=canvas.getBoundingClientRect(),ratio=Math.min(devicePixelRatio||1,2);
     const w=Math.round(rect.width*ratio),h=Math.round(rect.height*ratio);if(!w||!h)return;

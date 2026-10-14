@@ -27,16 +27,21 @@ simulated demonstration as proof of real-camera accuracy.
    or scan its optional QR code to fill them automatically. Keep the phone and
    ESP32 on the same Wi-Fi and allow local-network access. The PC and its setup
    tab can be closed; the phone communicates directly with the ESP32.
-4. Select the data GPIO, LED count, and color order. Test the estimated last
-   LED and the next index, adjusting the configured count as needed. The
+4. Select the data GPIO and color order. Changing the LED count saves the
+   length and lights that last LED automatically; adjust it until the final
+   physical LED lights. Test all three colors. The
    supported configuration range is 1–1024 LEDs; reconstruction needs at least
    12 shared LEDs to initialize and at least three overlapping views. Large strings still need
    hardware/performance testing.
 5. Start the camera. Walk slowly around the object while the LEDs display
    repeating identification colors. The UI shows identified tracks and
    captured views. No deliberate pauses or object measurements are required.
-6. Finish and inspect the 3D result. Capture more views if necessary. Set
-   the orientation, optionally estimate short gaps, and save the positions.
+6. Finish and watch reconstruction progress and elapsed time. Processing
+   continues even if the ESP32 stop response is slow. Capture data can be
+   downloaded or reconstruction cancelled and retried. Drag the 3D result
+   with a finger or mouse, or use the view rotation buttons to inspect it.
+   Capture more views if necessary. Set the orientation, optionally estimate
+   short gaps, and save the positions.
 7. Select fire, rising rings, a left/right sweep, or spatial rainbow. Effects
    run on the ESP32 and resume after reboot. The browser can disconnect.
 
@@ -124,6 +129,9 @@ The SDK/envelope is never modified in place.
 `scripts/browser-check.py` checks setup and capture in isolated browser
 profiles, including manual pairing, optional connection links, and saved
 connection details after a reload. USB flashing is simulated for this UI test.
+Regressions cover automatic last-LED testing, mobile camera visibility, touch
+rotation, visible failure after 93 candidate views with no identified views,
+and successful reconstruction while the device stop response is delayed.
 It also exercises the real UI, live video capture pipeline,
 reconstruction worker, responsive layout, and simulated device API with
 Playwright. A generated 18-second video stream moves continuously around

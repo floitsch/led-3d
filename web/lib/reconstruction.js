@@ -128,11 +128,12 @@ function updatePoints(byId,cameras,points,k,rng) {
     points.set(id,best);
   }
 }
-function initialize(frames,k,rng) {
+function initialize(frames,k,rng,onProgress) {
   let best=null;
   // Distributed view pairs avoid initializing on two nearly identical frames.
   const indices=[...new Set(Array.from({length:Math.min(8,frames.length)},(_,i)=>Math.round(i*(frames.length-1)/Math.max(1,Math.min(8,frames.length)-1))))];
   for(let a=0;a<indices.length;a++) for(let b=a+1;b<indices.length;b++) {
+    onProgress?.(`Finding starting viewpoints: pair ${a*(2*indices.length-a-1)/2+b-a} of ${indices.length*(indices.length-1)/2}`);
     const i=indices[a], j=indices[b], lookup=new Map(frames[j].observations.map(o=>[o.id,o]));
     const pairs=frames[i].observations.filter(o=>lookup.has(o.id)).map(o=>[o,lookup.get(o.id)]);
     if(pairs.length<12) continue;
@@ -143,12 +144,13 @@ function initialize(frames,k,rng) {
   return best;
 }
 function reconstructAtFocal(frames,byId,k,onProgress) {
-  const rng=random(), init=initialize(frames,k,rng);
+  const rng=random(), init=initialize(frames,k,rng,onProgress);
   if(!init) throw new Error('Not enough shared LEDs or viewpoint separation. Walk around the object and capture again.');
   const cameras=new Map([[init.i,{r:eye(3),t:[0,0,0]}],[init.j,init.camera]]), points=new Map(init.points);
   for(let pass=0;pass<frames.length;pass++) {
     let added=0;
     for(let i=0;i<frames.length;i++) if(!cameras.has(i)) {
+      onProgress?.(`Registering view ${i+1}/${frames.length} · ${cameras.size} registered`);
       const nearest=[...cameras.keys()].sort((a,b)=>Math.abs(a-i)-Math.abs(b-i))[0];
       const c=locateCamera(frames[i].observations,points,k,rng,cameras.get(nearest));
       if(c) {cameras.set(i,c);added++;}
@@ -160,6 +162,7 @@ function reconstructAtFocal(frames,byId,k,onProgress) {
   if(cameras.size<3) throw new Error('Need at least three overlapping viewpoints to verify depth. Keep walking around the lights.');
   // Alternating robust bundle adjustment. The anchor camera fixes orientation/translation.
   for(let iteration=0;iteration<8;iteration++) {
+    onProgress?.(`Refining LED positions: pass ${iteration+1}/8 · ${points.size} LEDs`);
     for(const [i,c] of cameras) if(i!==init.i) {
       const obs=frames[i].observations.filter(o=>points.has(o.id));
       const inliers=cameraInliers(c,obs,points,k,6);
@@ -175,7 +178,8 @@ export function validateCapture(capture) {
   if(!capture || capture.version!==1 || !Number.isInteger(capture.count) || capture.count<1 || capture.count>4096) throw new Error('Invalid capture LED count/version.');
   if(!Number.isInteger(capture.width)||!Number.isInteger(capture.height)||capture.width<32||capture.height<32||capture.width>8192||capture.height>8192) throw new Error('Invalid image size.');
   if(capture.focal!==undefined&&(!Number.isFinite(capture.focal)||capture.focal<=0||capture.focal>100000))throw new Error('Invalid camera focal length.');
-  if(!Array.isArray(capture.frames)||capture.frames.length<3||capture.frames.length>300) throw new Error('Capture needs 3–300 keyframes.');
+  if(!Array.isArray(capture.frames)||capture.frames.length>300) throw new Error('Capture needs 3–300 usable views.');
+  if(capture.frames.length<3)throw new Error(`Only ${capture.frames.length} usable views with identified LEDs. At least 3 are needed. Capture longer with overlapping LEDs; reduce glare or move more slowly.`);
   for(const frame of capture.frames) {
     if(!Array.isArray(frame.observations)||frame.observations.length>capture.count)throw new Error('Invalid observations.');
     const ids=new Set();
@@ -194,10 +198,11 @@ export function reconstruct(capture,onProgress) {
   const base=Math.max(capture.width,capture.height);
   const focals=capture.focal?[capture.focal]:[.65,.9,1.2].map(x=>x*base);
   let best=null, failure;
-  for(const f of focals) {
-    onProgress?.(`Solving camera geometry (focal ${Math.round(f)} px)…`);
+  for(const [candidate,f] of focals.entries()) {
+    const progress=message=>onProgress?.(`Camera model ${candidate+1}/${focals.length} · ${message}`);
+    progress(`Solving camera geometry (focal ${Math.round(f)} px)…`);
     try {
-      const result=reconstructAtFocal(frames,byId,{f,cx:capture.width/2,cy:capture.height/2,k1:0},onProgress);
+      const result=reconstructAtFocal(frames,byId,{f,cx:capture.width/2,cy:capture.height/2,k1:0},progress);
       const score=result.error+2*(1-result.cameras.size/frames.length)+2*(1-result.points.size/byId.size);
       if(!best||score<best.score)best={...result,score};
     } catch(e) {failure=e;}
@@ -205,6 +210,7 @@ export function reconstruct(capture,onProgress) {
   if(!best)throw failure;
   // Joint focal/distortion refinement is bounded to avoid unconstrained lens solutions.
   if(!capture.focal) for(let iter=0;iter<5;iter++) {
+    onProgress?.(`Refining camera lens: pass ${iter+1}/5`);
     const observations=[];
     for(const [id,p] of best.points) for(const o of byId.get(id)) if(best.cameras.has(o.frame) && pointError(p,[o],best.cameras,best.k)[0]<4) observations.push([o,p]);
     const lens=optimize([Math.log(best.k.f),best.k.k1],v=>{

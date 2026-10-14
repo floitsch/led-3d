@@ -95,6 +95,8 @@ def check(browser_path):
                     response = {'version': 1, 'hostname': 'led-test.local', 'config': config, 'mode': 'off', 'hasMap': bool(saved.get('map')), 'error': None}
                 elif route.request.method == 'POST':
                     saved[endpoint] = route.request.post_data_json
+                    if endpoint == 'config':
+                        config.update(saved[endpoint])
                     response = {'ok': True}
                 else:
                     response = saved.get(endpoint)
@@ -108,8 +110,20 @@ def check(browser_path):
             page.locator('#device-key').fill(pairing_key)
             page.get_by_role('button', name='Connect over Wi-Fi').click()
             page.wait_for_function("document.getElementById('connection').textContent.includes('Connected')")
+            # The device may report defaults before its GPIO is initialized.
             page.get_by_role('button', name='Save strip settings').click()
-            page.wait_for_function("document.getElementById('notice').textContent.includes('Strip settings saved')")
+            page.wait_for_function("document.getElementById('notice').textContent.includes('LED 80 is lit')")
+            assert saved['config']['count'] == 80 and saved['test']['index'] == 79
+            # One count field drives both configuration and the last-LED test.
+            assert page.locator('#test-index').count() == 0
+            page.locator('#count').fill('105')
+            page.locator('#count').press('Tab')
+            page.wait_for_function("document.getElementById('notice').textContent.includes('LED 105 is lit')")
+            assert saved['config']['count'] == 105 and saved['test']['index'] == 104
+            page.locator('#count').fill('80')
+            page.locator('#count').press('Tab')
+            page.wait_for_function("document.getElementById('notice').textContent.includes('LED 80 is lit')")
+            assert saved['config']['count'] == 80 and saved['test']['index'] == 79
             page.get_by_role('button', name='Scan', exact=True).click()
             # A pending camera permission request must not permit another scan
             # or navigation away into settings while startup is still running.
@@ -142,6 +156,8 @@ def check(browser_path):
                 : window.originalFetch(url, options);
             }""")
             page.get_by_role('button', name='Try a simulated scan').click()
+            page.wait_for_function("document.getElementById('solve-time').textContent.startsWith('1s elapsed')")
+            assert page.locator('#solve-progress').is_visible()
             page.locator('#cancel-scan').click()
             page.wait_for_function("typeof window.resolveTestStop === 'function'")
             assert page.locator('#start-scan').is_disabled()
@@ -155,10 +171,73 @@ def check(browser_path):
               window.resolveTestStop();
             }""")
             page.wait_for_function("!document.getElementById('start-scan').disabled")
+            # A large candidate-view count may still export no identified views.
+            # The failure must be visible even while the ESP32 stop request hangs.
+            page.evaluate((ROOT / 'tests/live-camera.js').read_text())
+            page.evaluate('''() => {
+              window.Worker = class {
+                postMessage(message) {
+                  if(message.type === 'start') this.count = message.count;
+                  if(message.type === 'frame') setTimeout(() => this.onmessage?.({data: {type:'frame',tracks:[],frames:93}}), 0);
+                  if(message.type === 'finish') setTimeout(() => this.onmessage?.({data: {type:'capture',capture:{version:1,count:this.count,width:480,height:360,frames:[]}}}), 0);
+                }
+                terminate() {}
+              };
+              window.resolveTestStop = null;
+              window.fetch = (url, options) => String(url).endsWith('/api/stop')
+                ? new Promise(resolve => { window.resolveTestStop = () => resolve(window.originalFetch(url, options)); })
+                : window.originalFetch(url, options);
+            }''')
+            page.set_viewport_size({'width': 390, 'height': 844})
+            page.locator('#new-capture').click()
+            page.locator('#start-scan').click()
+            try:
+                page.wait_for_function("document.getElementById('keyframes').textContent === '93'", timeout=10000)
+            except Exception:
+                print(page.locator('#scan-status').inner_text(), page.locator('#notice').inner_text(), errors, flush=True)
+                raise
+            assert page.locator('#camera-panel').evaluate('el => {const r=el.getBoundingClientRect();return r.top>=0 && r.bottom<=innerHeight;}')
+            page.locator('#finish-scan').scroll_into_view_if_needed()
+            assert page.locator('#camera-panel').evaluate('el => {const r=el.getBoundingClientRect();return r.top>=0 && r.bottom<=innerHeight;}')
+            page.screenshot(path=str(artifacts / 'mobile-camera.png'))
+            page.locator('#finish-scan').click()
+            page.wait_for_function("document.getElementById('scan-status').textContent.includes('Only 0 usable views')")
+            assert page.locator('#solve-progress').is_hidden()
+            assert page.locator('#export-capture').is_enabled()
+            with page.expect_download() as download:
+                page.locator('#export-capture').click()
+            assert json.loads(Path(download.value.path()).read_text())['frames'] == []
+            page.evaluate('''() => {
+              window.Worker = window.originalWorker;
+              window.fetch = window.originalFetch;
+              window.resolveTestStop();
+              window.cameraFixture.restore();
+            }''')
+            page.wait_for_function("!document.getElementById('start-scan').disabled")
+            page.set_viewport_size({'width':1280, 'height':960})
             page.get_by_role('button', name='Try a simulated scan').click()
             page.wait_for_function("!document.getElementById('play').hidden", timeout=120000)
             print(page.locator('#map-summary').inner_text())
             assert '80 measured' in page.locator('#map-summary').inner_text()
+            # Fixed colors make canvas comparisons deterministic: both touch
+            # dragging and explicit controls must rotate without changing the map.
+            page.locator('#effect').select_option('off')
+            page.wait_for_timeout(80)
+            before_view = page.locator('#viewer').screenshot()
+            page.locator('#view-right').click()
+            page.wait_for_timeout(80)
+            assert page.locator('#viewer').screenshot() != before_view
+            page.locator('#view-reset').click()
+            page.wait_for_timeout(80)
+            assert page.locator('#viewer').screenshot() == before_view
+            cdp = context.new_cdp_session(page)
+            box = page.locator('#viewer').bounding_box()
+            x, y = box['x'] + box['width']/2, box['y'] + box['height']/2
+            cdp.send('Input.dispatchTouchEvent', {'type':'touchStart','touchPoints':[{'x':x,'y':y}]})
+            cdp.send('Input.dispatchTouchEvent', {'type':'touchMove','touchPoints':[{'x':x+70,'y':y+25}]})
+            cdp.send('Input.dispatchTouchEvent', {'type':'touchEnd','touchPoints':[]})
+            page.wait_for_timeout(80)
+            assert page.locator('#viewer').screenshot() != before_view
             page.locator('#effect').select_option('fire')
             page.locator('#rotate-z').evaluate("el => { el.value = '90'; el.dispatchEvent(new Event('input', {bubbles: true})); }")
             page.get_by_role('button', name='Save positions to ESP32').click()
@@ -194,10 +273,20 @@ def check(browser_path):
             print(f'Live capture final view: {identified}/30 identified')
             assert int(page.locator('#keyframes').inner_text()) >= 20
             page.screenshot(path=str(artifacts / 'live-capture.png'), full_page=True)
+            page.evaluate('''() => {
+              window.resolveTestStop = null;
+              window.fetch = (url, options) => String(url).endsWith('/api/stop')
+                ? new Promise(resolve => { window.resolveTestStop = () => resolve(window.originalFetch(url, options)); })
+                : window.originalFetch(url, options);
+            }''')
             page.locator('#finish-scan').click()
             page.wait_for_function("!document.getElementById('play').hidden || (!document.getElementById('start-scan').disabled && document.getElementById('scan-status').textContent !== 'Finishing capture…')", timeout=120000)
             status = page.locator('#scan-status').inner_text()
             succeeded = page.locator('#play').is_visible()
+            assert page.locator('#send-effect').is_disabled()
+            assert page.locator('#solve-progress').is_hidden()
+            page.evaluate('''() => {window.fetch=window.originalFetch;window.resolveTestStop();}''')
+            page.wait_for_function("!document.getElementById('start-scan').disabled")
             page.get_by_role('button', name='Scan', exact=True).click()
             with page.expect_download() as download:
                 page.locator('#export-capture').click()
