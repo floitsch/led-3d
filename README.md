@@ -124,6 +124,12 @@ python3 -m playwright install --with-deps chrome
 python3 scripts/browser-check.py
 ```
 
+To check the published HTTPS app against an actual local HTTP socket, run
+`python3 scripts/local-network-check.py --bind <this-computer-LAN-IP>`.
+This uses Chrome with local-network permission granted by automation and
+checks CORS preflight plus the authenticated status request. It simulates
+device status, so it does not replace the ESP32/Android connection test.
+
 With GitHub CLI authenticated and network access available,
 `python3 scripts/publish.py` creates the public `floitsch/led-3d` repository,
 pushes an explicit set of source files from a temporary checkout, and enables
@@ -183,5 +189,13 @@ driver, identification patterns, and all four effects with a synthetic map,
 then turns the lights off. Review its pin/count before building it into a
 test envelope. It does not configure Wi-Fi, save its synthetic map, or prove
 optical correctness; it is not run as a host unit test.
+
+Validation on 2026-10-14: Chrome UI tests passed in CI with Chrome
+155.0.8059.79. The deployed app reconstructed all 80 simulated LEDs, and the
+HTTPS-to-LAN HTTP check passed locally. The GPIO 32 smoke test completed on
+an ESP32-D0WD-V3 with 4 MiB flash and the release SDK. Its slowest 100-LED
+identification update was 14.3 ms, within the 100 ms symbol interval. Effects
+also completed, but update rates and visible output still need evaluation
+with the actual string; this is not evidence of real-camera reconstruction.
 
 See [THIRD_PARTY.md](THIRD_PARTY.md) for dependency licenses.
