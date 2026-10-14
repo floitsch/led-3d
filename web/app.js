@@ -4,10 +4,9 @@ import {Device,validateMap} from './lib/device.js';
 import {Viewer,orient} from './lib/viewer.js';
 import {fillShortGaps,validateCapture} from './lib/reconstruction.js';
 import {syntheticCapture} from './lib/synthetic.js';
-import {flash,validateNetwork} from './lib/installer.js';
 
 const $=id=>document.getElementById(id),viewer=new Viewer($('viewer'));
-let device=null,deviceConfig=null,capture=null,baseMap=null,stream=null,captureWorker=null,solveWorker=null,scanning=false,frameBusy=false,flashBundle=null,scanTimer=null,videoFrameHandle=null;
+let device=null,deviceConfig=null,capture=null,baseMap=null,stream=null,captureWorker=null,solveWorker=null,scanning=false,frameBusy=false,scanTimer=null,videoFrameHandle=null;
 let startingScan=false,finishingScan=false,stopRequest=null;
 const params=new URLSearchParams(location.hash.slice(1));
 function readSaved(key){try{return localStorage.getItem(key);}catch{return null;}}
@@ -202,16 +201,3 @@ action('finish-scan',async()=>{
 });
 action('cancel-scan',()=>cancelCapture('Cancelled. Earlier capture data is retained.'));
 document.addEventListener('visibilitychange',()=>{if(document.hidden&&scanning)$('finish-scan').click();});
-
-$('firmware-file').onchange=async()=>{try{const file=$('firmware-file').files[0];if(!file)return;if(file.size>7*1024*1024)throw new Error('Firmware bundle is too large.');flashBundle=JSON.parse(await file.text());notice(`Selected firmware for ${flashBundle.manifest?.chip}.`);}catch(e){notice(e.message,true);}};
-action('install-form',async()=>{
-  const key=Array.from(crypto.getRandomValues(new Uint8Array(16)),b=>b.toString(16).padStart(2,'0')).join('');
-  const settings={ssid:$('ssid').value,password:$('password').value,hostname:$('hostname').value,key};validateNetwork(settings);
-  $('flash-progress').hidden=false;
-  await flash(settings,{bundle:flashBundle,onStatus:s=>$('flash-status').textContent=s,onProgress:n=>$('flash-progress').value=n});
-  $('password').value='';const host=`${settings.hostname}.local`,link=new URL('./',location.href);link.hash=new URLSearchParams({device:host,key}).toString();
-  $('address').value=host;$('device-key').value=key;save('led3d.address',host);save(`led3d.key.${host}`,key);
-  $('wifi-link').href=link.href;$('phone-link').value=link.href;$('installed').hidden=false;
-  try{const qr=await import('https://esm.sh/qrcode@1.5.4');await qr.default.toCanvas($('qr'),link.href,{width:240,margin:1});}
-  catch{$('qr').hidden=true;notice('Installed. Copy the connection link to your phone; QR generation is unavailable.');}
-});

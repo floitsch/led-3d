@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#101720"><title>LED 3D — Set up your ESP32</title><link rel="stylesheet" href="style.css"></head>
+<body>
+<header><a class="brand" href="./"><span class="logo">✳</span> LED <b>3D</b></a><a href="capture.html">Capture & play →</a></header>
+<main>
+<div class="intro"><p class="eyebrow">ON YOUR COMPUTER · ONE-TIME SETUP</p><h1>Meet your controller.</h1><p>Install over USB, then use your phone independently.<br>The ESP32 keeps its settings; this computer can be switched off.</p></div>
+<p id="notice" role="status" aria-live="polite" hidden></p>
+<section class="panel">
+  <h2>Install & configure Wi-Fi.</h2><p>Use the latest Google Chrome with the ESP32 connected by USB. Installation replaces its existing firmware and settings.</p>
+  <form id="install-form"><div class="fields"><label>Wi-Fi name<input id="ssid" required maxlength="32" autocomplete="off"></label><label>Wi-Fi password<input id="password" type="password" maxlength="63" autocomplete="new-password"></label><label>Device name<span class="input-suffix"><input id="hostname" value="led-tree" required pattern="[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?" maxlength="63"><span>.local</span></span></label></div>
+  <button class="primary" id="install-button">Install & configure Wi-Fi</button><progress id="flash-progress" max="100" value="0" hidden></progress><p id="flash-status" role="status"></p></form>
+  <details><summary>Use a locally built firmware bundle</summary><input id="firmware-file" type="file" accept=".json" aria-label="Firmware bundle"></details>
+</section>
+<section class="panel" id="installed" hidden style="margin-top:24px">
+  <p class="eyebrow">KEEP THESE DETAILS</p><h2>Connect from your phone.</h2>
+  <p>Open <a href="capture.html">the capture page</a> on your phone, on the same Wi-Fi as the ESP32. Enter these details there. You can bookmark that page and return at any time.</p>
+  <div class="fields"><label>Device address<input id="saved-address" readonly></label><label>Pairing key<input id="saved-key" readonly spellcheck="false"></label></div>
+  <p>Or scan this QR code to fill both fields automatically:</p>
+  <canvas id="qr" aria-label="QR code for phone connection" hidden></canvas>
+  <label>Phone connection link<input id="phone-link" readonly></label><a id="wifi-link" class="button primary">Open capture for this ESP32</a>
+  <p class="small">These connection details are remembered in this browser. Keep a copy if you clear browser data. The phone does not need this setup tab to stay open.</p>
+</section>
+</main><footer><span>LED 3D · Toit + ESP32</span><a href="capture.html">Open capture on your phone</a><a href="https://github.com/floitsch/led-3d">Source code ↗</a></footer>
+<script type="module" src="setup.js"></script>
+</body></html>

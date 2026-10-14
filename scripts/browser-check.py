@@ -13,6 +13,55 @@ from playwright.sync_api import sync_playwright
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def check_setup(browser, base, artifacts):
+    desktop = browser.new_context(viewport={'width': 1280, 'height': 960})
+    # Keep real settings validation but simulate USB flashing. Provisioning
+    # checksums are covered separately; this checks the two-device workflow.
+    installer = (ROOT / 'web/lib/installer.js').read_text().split('export async function flash(')[0]
+    installer += '''export async function flash(settings, {onStatus, onProgress}) {
+      window.testProvisionedSettings = settings;
+      onProgress(100); onStatus('Installed test controller.');
+    }'''
+    desktop.route('**/lib/installer.js', lambda route: route.fulfill(body=installer, content_type='text/javascript'))
+    desktop.route('https://esm.sh/qrcode@1.5.4', lambda route: route.fulfill(
+        body='export default {toCanvas: async () => {}};', content_type='text/javascript'))
+    setup = desktop.new_page()
+    setup.goto(base + '/setup.html')
+    assert setup.locator('#start-scan').count() == 0
+    setup.locator('#ssid').fill('test-network')
+    setup.locator('#password').fill('test-password')
+    setup.locator('#hostname').fill('led-test')
+    setup.get_by_role('button', name='Install & configure Wi-Fi').click()
+    setup.locator('#installed').wait_for(state='visible')
+    pairing_key = setup.locator('#saved-key').input_value()
+    assert len(pairing_key) == 32
+    assert setup.locator('#saved-address').input_value() == 'led-test.local'
+    assert setup.locator('#password').input_value() == ''
+    link = setup.locator('#phone-link').input_value()
+    assert '/capture.html#' in link
+    assert setup.evaluate('window.testProvisionedSettings.key') == pairing_key
+    setup.reload()
+    setup.locator('#installed').wait_for(state='visible')
+    assert setup.locator('#saved-key').input_value() == pairing_key
+    setup.screenshot(path=str(artifacts / 'setup-desktop.png'), full_page=True)
+    desktop.close()
+
+    # A phone gets no desktop cookies or localStorage. Both the explicit link
+    # and old root-page installation links must work in a fresh browser.
+    for target in [link, link.replace('/capture.html#', '/#')]:
+        phone = browser.new_context()
+        page = phone.new_page()
+        page.goto(target)
+        page.wait_for_function("document.getElementById('device-key')?.value.length === 32")
+        assert page.locator('#address').input_value() == 'led-test.local'
+        assert page.locator('#device-key').input_value() == pairing_key
+        assert 'capture.html' in page.url and 'key=' not in page.url
+        page.reload()
+        page.wait_for_function("document.getElementById('device-key')?.value.length === 32")
+        phone.close()
+    return pairing_key
+
+
 def check(browser_path):
     server = ThreadingHTTPServer(('127.0.0.1', 0), partial(SimpleHTTPRequestHandler, directory=str(ROOT / 'web')))
     thread = threading.Thread(target=server.serve_forever, daemon=True)
@@ -25,6 +74,7 @@ def check(browser_path):
             browser = p.chromium.launch(**({'executable_path': browser_path} if browser_path else {'channel': 'chrome'}))
             print(f'Testing Google Chrome {browser.version}')
             (artifacts / 'browser-version.txt').write_text(f'Google Chrome {browser.version}\n')
+            pairing_key = check_setup(browser, base, artifacts)
             context = browser.new_context(viewport={'width': 1280, 'height': 960})
             page = context.new_page()
             errors = []
@@ -38,6 +88,9 @@ def check(browser_path):
                 if route.request.method == 'OPTIONS':
                     route.fulfill(status=204, headers=headers)
                     return
+                if route.request.headers.get('x-led-key') != pairing_key:
+                    route.fulfill(status=401, json={'error': 'Invalid pairing key'}, headers=headers)
+                    return
                 if endpoint == 'status':
                     response = {'version': 1, 'hostname': 'led-test.local', 'config': config, 'mode': 'off', 'hasMap': bool(saved.get('map')), 'error': None}
                 elif route.request.method == 'POST':
@@ -48,15 +101,16 @@ def check(browser_path):
                 route.fulfill(json=response, headers=headers)
 
             context.route('http://led-test.local/**', device)
-            page.goto(base)
+            page.goto(base + '/capture.html')
+            assert page.locator('#device-key').input_value() == ''
+            assert page.locator('#install-form').count() == 0
             page.locator('#address').fill('led-test.local')
-            page.get_by_text('Pairing key', exact=True).click()
-            page.locator('#device-key').fill('a' * 32)
+            page.locator('#device-key').fill(pairing_key)
             page.get_by_role('button', name='Connect over Wi-Fi').click()
             page.wait_for_function("document.getElementById('connection').textContent.includes('Connected')")
             page.get_by_role('button', name='Save strip settings').click()
             page.wait_for_function("document.getElementById('notice').textContent.includes('Strip settings saved')")
-            page.get_by_role('button', name='03 Scan').click()
+            page.get_by_role('button', name='Scan', exact=True).click()
             # A pending camera permission request must not permit another scan
             # or navigation away into settings while startup is still running.
             page.evaluate("""() => {
@@ -69,7 +123,7 @@ def check(browser_path):
             page.wait_for_function("typeof window.rejectTestCamera === 'function'")
             assert page.locator('#demo').is_disabled()
             assert page.locator('#new-capture').is_disabled()
-            page.get_by_role('button', name='02 Connect').click()
+            page.get_by_role('button', name='Connect', exact=True).click()
             assert page.locator('#scan').is_visible()
             page.evaluate("""() => {
               navigator.mediaDevices.getUserMedia = window.originalGetUserMedia;
@@ -93,7 +147,7 @@ def check(browser_path):
             assert page.locator('#start-scan').is_disabled()
             assert page.locator('#demo').is_disabled()
             assert page.locator('#new-capture').is_disabled()
-            page.get_by_role('button', name='02 Connect').click()
+            page.get_by_role('button', name='Connect', exact=True).click()
             assert page.locator('#scan').is_visible()
             page.evaluate("""() => {
               window.Worker = window.originalWorker;
@@ -125,11 +179,11 @@ def check(browser_path):
             # Exercise the actual live video path, rather than starting from
             # precomputed point observations as the demonstration does.
             page.set_viewport_size({'width': 1280, 'height': 960})
-            page.get_by_role('button', name='02 Connect').click()
+            page.get_by_role('button', name='Connect', exact=True).click()
             page.locator('#count').fill('30')
             page.get_by_role('button', name='Save strip settings').click()
             page.wait_for_function("document.getElementById('notice').textContent.includes('Strip settings saved')")
-            page.get_by_role('button', name='03 Scan').click()
+            page.get_by_role('button', name='Scan', exact=True).click()
             page.locator('#new-capture').click()
             page.get_by_text('Capture files & camera calibration', exact=True).click()
             page.locator('#focal').fill('500')
@@ -144,13 +198,13 @@ def check(browser_path):
             page.wait_for_function("!document.getElementById('play').hidden || (!document.getElementById('start-scan').disabled && document.getElementById('scan-status').textContent !== 'Finishing capture…')", timeout=120000)
             status = page.locator('#scan-status').inner_text()
             succeeded = page.locator('#play').is_visible()
-            page.get_by_role('button', name='03 Scan').click()
+            page.get_by_role('button', name='Scan', exact=True).click()
             with page.expect_download() as download:
                 page.locator('#export-capture').click()
             live_capture = json.loads(Path(download.value.path()).read_text())
             (artifacts / 'live-observations.json').write_text(json.dumps(live_capture))
             assert succeeded, status
-            page.get_by_role('button', name='04 Play').click()
+            page.get_by_role('button', name='Play', exact=True).click()
             assert page.evaluate("window.cameraFixture.stream.getTracks().every(t => t.readyState === 'ended')")
             assert 'scan' in saved and 'stop' in saved
             with page.expect_download() as download:

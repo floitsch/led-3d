@@ -17,12 +17,16 @@ simulated demonstration as proof of real-camera accuracy.
 
 ## User workflow
 
-1. Open the HTTPS app in desktop Chrome and connect an ESP32 by USB.
+1. Open [setup](https://floitsch.github.io/led-3d/setup.html) in desktop Chrome
+   and connect an ESP32 by USB.
 2. Enter Wi-Fi credentials and a device name, then install. The browser
    detects the chip and inserts the configuration into a prebuilt Toit image.
    Installation replaces the board's existing firmware and stored settings.
-3. Open the resulting connection link (or its QR code) on Android Chrome.
-   Keep the phone and ESP32 on the same Wi-Fi and allow local-network access.
+3. Independently open [capture](https://floitsch.github.io/led-3d/capture.html)
+   in Android Chrome. Enter the device address and pairing key shown by setup,
+   or scan its optional QR code to fill them automatically. Keep the phone and
+   ESP32 on the same Wi-Fi and allow local-network access. The PC and its setup
+   tab can be closed; the phone communicates directly with the ESP32.
 4. Select the data GPIO, LED count, and color order. Test the estimated last
    LED and the next index, adjusting the configured count as needed. The
    supported configuration range is 1–1024 LEDs; reconstruction needs at least
@@ -36,6 +40,12 @@ simulated demonstration as proof of real-camera accuracy.
 7. Select fire, rising rings, a left/right sweep, or spatial rainbow. Effects
    run on the ESP32 and resume after reboot. The browser can disconnect.
 
+Setup and capture are separate pages with separate scripts. The phone does
+not need to have visited setup or share browser state with the PC. Bookmark
+the capture page to return later; it remembers that phone's connection details.
+Setup also remembers its last connection details for reopening the QR code
+without reflashing. Old root-page installation links continue to work.
+
 Current capture sessions stop after 80 seconds; additional sessions can be
 combined. Keep the object still and use the same lens, zoom, and phone
 orientation throughout. Keep enough LEDs shared between successive views.
@@ -46,7 +56,8 @@ Dim the lights if their colors saturate to white or neighboring spots merge.
 | Component | Location and responsibility |
 | --- | --- |
 | Static website | GitHub Pages serves `web/` and prebuilt firmware bundles. |
-| Installer | Browser USB flashing using esptool-js; Wi-Fi provisioning occurs here. |
+| Setup page (`setup.html`) | PC browser USB flashing using esptool-js; Wi-Fi provisioning and phone connection details. |
+| Capture page (`capture.html`) | Independent phone UI for Wi-Fi connection, scanning, saved maps, and effects. |
 | Capture worker | Browser: connected-component detection, tracking, temporal identity decoding. |
 | Reconstruction worker | Browser: camera poses, triangulation, outlier rejection, bundle refinement. |
 | Toit companion | ESP32: mDNS, HTTP API, `pixel-strip` output, configuration/map storage, effects. |
@@ -75,7 +86,7 @@ to run the static app and numerical tests:
 ```sh
 npm test
 npm run serve
-# Open http://localhost:8080 and choose Scan → Try a simulated scan.
+# Open http://localhost:8080/capture.html and choose Scan → Try a simulated scan.
 npm run build
 ```
 
@@ -110,7 +121,10 @@ The browser verifies the bundle SHA-256, writes the UBJSON configuration
 region, and recomputes the ESP image checksum and SHA-256 before flashing.
 The SDK/envelope is never modified in place.
 
-`scripts/browser-check.py` exercises the real UI, live video capture pipeline,
+`scripts/browser-check.py` checks setup and capture in isolated browser
+profiles, including manual pairing, optional connection links, and saved
+connection details after a reload. USB flashing is simulated for this UI test.
+It also exercises the real UI, live video capture pipeline,
 reconstruction worker, responsive layout, and simulated device API with
 Playwright. A generated 18-second video stream moves continuously around
 known LEDs with camera shake. The test checks recovered geometry, stops the

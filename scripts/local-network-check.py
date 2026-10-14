@@ -64,7 +64,6 @@ def check(address, site):
             page.goto(site)
             assert page.evaluate('isSecureContext')
             page.locator('#address').fill(f'{address}:{server.server_port}')
-            page.get_by_text('Pairing key', exact=True).click()
             page.locator('#device-key').fill(token)
             page.get_by_role('button', name='Connect over Wi-Fi').click()
             page.wait_for_function("document.getElementById('connection').textContent.includes('Connected')")
@@ -80,6 +79,6 @@ def check(address, site):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--bind', required=True)
-    parser.add_argument('--site', default='https://floitsch.github.io/led-3d/')
+    parser.add_argument('--site', default='https://floitsch.github.io/led-3d/capture.html')
     args = parser.parse_args()
     check(args.bind, args.site)
