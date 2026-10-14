@@ -9,9 +9,11 @@ The supported browser is the latest stable Google Chrome: desktop Chrome for
 USB installation and Android Chrome for capture. Other browsers and older
 Chrome releases are outside the support target.
 
-**Status:** implementation and synthetic tests are available. Physical
-ESP32/LED/Android validation and public deployment have not yet been completed.
-Do not interpret the simulated demonstration as proof of real-camera accuracy.
+**Status:** the [HTTPS app](https://floitsch.github.io/led-3d/) is deployed.
+Numerical tests, firmware model tests, and Chrome UI tests pass in
+[GitHub Actions](https://github.com/floitsch/led-3d/actions). Physical
+ESP32/LED/Android validation is still in progress. Do not interpret the
+simulated demonstration as proof of real-camera accuracy.
 
 ## User workflow
 
@@ -62,9 +64,8 @@ at installation. It is included in the phone link's URL fragment (not sent
 to GitHub), then retained in the browser's local storage. A local-network
 HTTP connection assumes a trusted Wi-Fi network; it is not encrypted.
 
-The source is intended for `github.com/floitsch/led-3d` and its Pages URL
-`https://floitsch.github.io/led-3d/`. These are intended destinations, not a
-claim that this checkout has been published.
+Source: [github.com/floitsch/led-3d](https://github.com/floitsch/led-3d).
+App: [floitsch.github.io/led-3d](https://floitsch.github.io/led-3d/).
 
 ## Development
 
@@ -175,5 +176,12 @@ real optical ID decoding under camera auto-exposure/rolling shutter,
 ESP32 strip timing under Wi-Fi load, USB flashing on each supported variant,
 and reconstructed geometry on a real object. Numerical tests alone cannot
 prove these. Start with 100 LEDs and compare repeat scans from different paths.
+
+`firmware/tests/hardware-test.toit` is a separate on-device smoke test for a
+classic ESP32 with 100 LEDs on GPIO 32. It exercises the real `pixel-strip`
+driver, identification patterns, and all four effects with a synthetic map,
+then turns the lights off. Review its pin/count before building it into a
+test envelope. It does not configure Wi-Fi, save its synthetic map, or prove
+optical correctness; it is not run as a host unit test.
 
 See [THIRD_PARTY.md](THIRD_PARTY.md) for dependency licenses.

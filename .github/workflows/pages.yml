@@ -30,7 +30,7 @@ jobs:
         run: toit pkg --project-root firmware install
       - name: Validate firmware and model
         run: |
-          toit analyze -Werror firmware/src/main.toit firmware/tests/model-test.toit firmware/tests/controller-test.toit
+          toit analyze -Werror firmware/src/main.toit firmware/tests/model-test.toit firmware/tests/controller-test.toit firmware/tests/hardware-test.toit
           python3 scripts/test-firmware.py
       - name: Build matching release firmware
         run: |
