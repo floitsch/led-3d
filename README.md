@@ -110,8 +110,11 @@ The browser verifies the bundle SHA-256, writes the UBJSON configuration
 region, and recomputes the ESP image checksum and SHA-256 before flashing.
 The SDK/envelope is never modified in place.
 
-`scripts/browser-check.py` exercises the real UI, reconstruction worker,
-responsive layout, and simulated device API with Playwright. It launches
+`scripts/browser-check.py` exercises the real UI, live video capture pipeline,
+reconstruction worker, responsive layout, and simulated device API with
+Playwright. A generated 18-second video stream moves continuously around
+known LEDs with camera shake. The test checks recovered geometry, stops the
+video tracks, and saves the captured observations for diagnosis. It launches
 Google Chrome's stable channel by default and accepts `--browser` for an
 existing Google Chrome executable. It needs an environment that permits
 browser processes and localhost sockets. CI installs the latest stable Chrome
@@ -197,5 +200,8 @@ an ESP32-D0WD-V3 with 4 MiB flash and the release SDK. Its slowest 100-LED
 identification update was 14.3 ms, within the 100 ms symbol interval. Effects
 also completed, but update rates and visible output still need evaluation
 with the actual string; this is not evidence of real-camera reconstruction.
+The generated live-video check also reconstructed all 30 LEDs with 0.11%
+relative pairwise shape error locally. Its camera stream is synthetic; actual
+exposure, rolling shutter, and optical reflections remain untested.
 
 See [THIRD_PARTY.md](THIRD_PARTY.md) for dependency licenses.

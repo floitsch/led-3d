@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 # Copyright (C) 2026 Toit contributors. MIT license; see LICENSE.
-"""Exercise real UI/workers with mocked device I/O. Does not test physical LNA/USB."""
+"""Exercise UI, video capture, and workers with simulated camera/device input."""
 import argparse
 from functools import partial
 from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
 import json
+import math
 from pathlib import Path
 import threading
 from playwright.sync_api import sync_playwright
@@ -120,6 +121,52 @@ def check(browser_path):
             page.set_viewport_size({'width': 390, 'height': 844})
             assert not page.evaluate('document.documentElement.scrollWidth > innerWidth'), 'Mobile horizontal overflow'
             page.screenshot(path=str(artifacts / 'mobile.png'), full_page=True)
+
+            # Exercise the actual live video path, rather than starting from
+            # precomputed point observations as the demonstration does.
+            page.set_viewport_size({'width': 1280, 'height': 960})
+            page.get_by_role('button', name='02 Connect').click()
+            page.locator('#count').fill('30')
+            page.get_by_role('button', name='Save strip settings').click()
+            page.wait_for_function("document.getElementById('notice').textContent.includes('Strip settings saved')")
+            page.get_by_role('button', name='03 Scan').click()
+            page.locator('#new-capture').click()
+            page.get_by_text('Capture files & camera calibration', exact=True).click()
+            page.locator('#focal').fill('500')
+            page.evaluate((ROOT / 'tests/live-camera.js').read_text())
+            page.locator('#start-scan').click()
+            page.wait_for_function("window.cameraFixture.elapsed >= 18", timeout=30000)
+            identified = int(page.locator('#identified').inner_text())
+            print(f'Live capture final view: {identified}/30 identified')
+            assert int(page.locator('#keyframes').inner_text()) >= 20
+            page.screenshot(path=str(artifacts / 'live-capture.png'), full_page=True)
+            page.locator('#finish-scan').click()
+            page.wait_for_function("!document.getElementById('play').hidden || (!document.getElementById('start-scan').disabled && document.getElementById('scan-status').textContent !== 'Finishing capture…')", timeout=120000)
+            status = page.locator('#scan-status').inner_text()
+            succeeded = page.locator('#play').is_visible()
+            page.get_by_role('button', name='03 Scan').click()
+            with page.expect_download() as download:
+                page.locator('#export-capture').click()
+            live_capture = json.loads(Path(download.value.path()).read_text())
+            (artifacts / 'live-observations.json').write_text(json.dumps(live_capture))
+            assert succeeded, status
+            page.get_by_role('button', name='04 Play').click()
+            assert page.evaluate("window.cameraFixture.stream.getTracks().every(t => t.readyState === 'ended')")
+            assert 'scan' in saved and 'stop' in saved
+            with page.expect_download() as download:
+                page.get_by_role('button', name='Download positions').click()
+            live_map = json.loads(Path(download.value.path()).read_text())
+            points = page.evaluate('window.cameraFixture.points')
+            measured = [led for led in live_map['leds'] if led['status'] == 'measured']
+            assert len(measured) >= 27, f'Only {len(measured)}/30 LEDs reconstructed from live video'
+            pairs = [(math.dist(a['position'], b['position']), math.dist(points[a['id']], points[b['id']]))
+                     for i, a in enumerate(measured) for b in measured[i + 1:]]
+            scale = sum(a * b for a, b in pairs) / sum(a * a for a, _ in pairs)
+            error = math.sqrt(sum((a * scale - b) ** 2 for a, b in pairs) / sum(b * b for _, b in pairs))
+            assert error < .05, f'Live capture relative shape error {error:.2%}'
+            print(f'Live video: {len(measured)}/30 LEDs reconstructed, relative shape error {error:.2%}')
+            (artifacts / 'live-capture-map.json').write_text(json.dumps(live_map))
+            page.evaluate('window.cameraFixture.restore()')
             assert not errors, errors
             browser.close()
     finally:
