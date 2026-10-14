@@ -1,0 +1,18 @@
+sdk: ^2.0.0-alpha.199
+prefixes:
+  pixel_strip: pixel_strip
+  mdns: mdns
+  http: http
+packages:
+  pixel_strip:
+    url: github.com/toitware/toit-pixel-strip
+    version: 1.4.0
+    hash: e7b0942f6cdc8f5575a3d7e78b74fef1544117c5
+  mdns:
+    url: github.com/close2/toit-mdns
+    version: 1.0.6
+    hash: 63ba25b3fa2538712eeba1447c7f02b79df8f6d2
+  http:
+    url: github.com/toitlang/pkg-http
+    version: 2.15.0
+    hash: dbe7effdb578273b940b2cd789ecd0ca0a588d85

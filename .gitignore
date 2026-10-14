@@ -1,0 +1,10 @@
+node_modules/
+dist/
+build/
+.packages/
+*.snapshot
+*.image
+*.envelope
+.DS_Store
+web/firmware/*.json
+__pycache__/

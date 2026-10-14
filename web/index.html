@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#101720"><title>LED 3D — Give your lights a sense of space</title><link rel="stylesheet" href="style.css"></head>
+<body>
+<header><a class="brand" href="./"><span class="logo">✳</span> LED <b>3D</b></a><span class="badge" id="connection">Browser only · disconnected</span></header>
+<main>
+<div class="intro"><p class="eyebrow">FROM A STRING OF LIGHTS TO A SPACE OF POSSIBILITIES</p><h1>Give your lights<br>a sense of space.</h1><p>Connect your ESP32. Walk around with your camera.<br>Turn any arrangement into a canvas for light.</p></div>
+<nav aria-label="Setup stages"><button data-step="install">01 Install</button><button data-step="connect" class="active">02 Connect</button><button data-step="scan">03 Scan</button><button data-step="play">04 Play</button></nav>
+<p id="notice" role="status" aria-live="polite" hidden></p>
+<section id="install" class="panel stage" hidden>
+  <p class="eyebrow">ONE-TIME SETUP · USB</p><h2>Meet your controller.</h2><p>Use the latest Google Chrome on a computer with the ESP32 connected by USB. Installation replaces its existing firmware. Wi-Fi settings are written directly to the board.</p>
+  <form id="install-form"><div class="fields"><label>Wi-Fi name<input id="ssid" required maxlength="32" autocomplete="off"></label><label>Wi-Fi password<input id="password" type="password" maxlength="63" autocomplete="new-password"></label><label>Device name<span class="input-suffix"><input id="hostname" value="led-tree" required pattern="[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?" maxlength="63"><span>.local</span></span></label></div>
+  <button class="primary" id="install-button">Install & configure Wi-Fi</button><progress id="flash-progress" max="100" value="0" hidden></progress><p id="flash-status" role="status"></p></form>
+  <div id="installed" hidden><a id="wifi-link" class="button primary">Connect to ESP32 over Wi-Fi</a><p>Open this link on your Android phone, on the same Wi-Fi:</p><canvas id="qr" aria-label="QR code for phone connection"></canvas><input id="phone-link" readonly aria-label="Phone connection link"></div>
+  <details><summary>Use a locally built firmware bundle</summary><input id="firmware-file" type="file" accept=".json" aria-label="Firmware bundle"></details>
+</section>
+<section id="connect" class="stage">
+  <div class="columns"><div class="panel"><p class="eyebrow">YOUR LIGHTS · YOUR NETWORK</p><h2>Make the connection.</h2><p>Use the latest Google Chrome on your Android phone. Keep your phone and ESP32 on the same Wi-Fi, and allow local-network access when Chrome asks.</p>
+  <form id="connect-form"><label>Device address<input id="address" placeholder="led-tree.local" value="led-tree.local" required autocapitalize="none" spellcheck="false"></label><details><summary>Pairing key</summary><label>Device key<input id="device-key" type="password" autocomplete="off"><small>Filled automatically by the installation link.</small></label></details><button class="primary">Connect over Wi-Fi</button></form><button id="load-device-map" disabled>Load saved positions</button>
+  <p class="small">First time? <button class="text" data-step="install">Install the companion</button></p></div>
+  <div class="panel"><p class="eyebrow">CHECK YOUR STRING</p><h2>Every LED accounted for.</h2><form id="config-form"><div class="fields"><label>Data GPIO<input id="pin" type="number" min="0" max="48" value="18" required></label><label>LED count<input id="count" type="number" min="1" max="1024" value="100" required></label><label>Color order<select id="order"><option>GRB</option><option>RGB</option><option>BRG</option><option>RBG</option><option>GBR</option><option>BGR</option></select></label></div><button id="configure" disabled>Save strip settings</button></form>
+  <div class="fields"><label>LED to test (1-based)<input id="test-index" type="number" min="1" max="1024" value="100"></label><label>Test color<select id="test-color"><option value="red">Red</option><option value="green">Green</option><option value="blue">Blue</option></select></label></div>
+  <div class="actions"><button id="test-led" disabled>Light this LED</button><button id="test-off" disabled>Lights off</button></div><p class="small">Try the estimated final LED, then the next one. Adjust the count until the final physical LED matches. Confirm all three colors before scanning.</p><button class="primary" data-step="scan">Continue to scan →</button></div></div>
+</section>
+<section id="scan" class="stage" hidden>
+  <div class="section-head"><div><p class="eyebrow">A WALK AROUND YOUR LIGHTS</p><h2>Discover their shape.</h2></div><button id="demo">Try a simulated scan</button></div>
+  <div class="columns"><div class="camera panel"><video id="video" autoplay playsinline muted></video><canvas id="overlay"></canvas><div id="camera-empty">Your camera view appears here.<br>Video stays on this device.</div></div>
+  <div class="panel"><p>Move slowly around the object, keeping overlapping groups of LEDs visible. Ordinary hand shake is fine. Avoid zooming or switching lenses during capture.</p><div class="stats"><div><strong id="identified">0</strong><span>identified in view</span></div><div><strong id="keyframes">0</strong><span>captured views</span></div></div>
+  <label>Scan brightness<input id="scan-brightness" type="range" min="25" max="180" value="80"></label><label>Detection threshold<input id="threshold" type="range" min="20" max="180" value="45"></label><p class="small">Reduce brightness if lights look white or merge into large spots.</p>
+  <div class="actions"><button id="start-scan" class="primary">Start camera & scan</button><button id="finish-scan" disabled>Finish & reconstruct</button><button id="cancel-scan" disabled>Cancel</button><button id="new-capture">Start fresh</button></div><p id="scan-status" role="status">Capture from several sides. No measurements needed.</p>
+  <details><summary>Capture files & camera calibration</summary><label>Focal length in capture pixels (optional)<input id="focal" type="number" min="100" max="5000" placeholder="Estimate automatically"></label><button id="export-capture" disabled>Download capture data</button><label>Import capture or position map<input id="import" type="file" accept=".json"></label></details></div></div>
+</section>
+<section id="play" class="stage" hidden>
+  <div class="section-head"><div><p class="eyebrow">LIGHT THAT KNOWS WHERE IT IS</p><h2>Your space. In motion.</h2></div><span id="map-summary" class="badge">No map yet</span></div>
+  <div class="columns"><div class="panel preview"><canvas id="viewer" aria-label="Interactive 3D LED preview; drag to rotate"></canvas><p class="small">Drag to orbit · amber outlines are estimated positions</p></div><div class="panel"><label>Effect<select id="effect"><option value="rainbow">Spatial rainbow</option><option value="fire">Fire</option><option value="rings">Rising rings</option><option value="swipe">Left / right sweep</option><option value="off">Off</option></select></label><label>Speed<input id="speed" type="range" min="0.1" max="3" step="0.1" value="1"></label><label>Brightness<input id="brightness" type="range" min="0" max="1" step="0.01" value="0.3"></label>
+  <details open><summary>Set the orientation</summary><p class="small">Rotate until “up” in the preview matches your object. This changes the saved coordinates.</p><label>Tilt X<input id="rotate-x" type="range" min="-180" max="180" value="0"></label><label>Tilt Y<input id="rotate-y" type="range" min="-180" max="180" value="0"></label><label>Turn Z<input id="rotate-z" type="range" min="-180" max="180" value="0"></label></details>
+  <label class="check"><input id="chain" type="checkbox" checked>Show string connections</label><label class="check"><input id="fill-gaps" type="checkbox">Estimate gaps of up to 3 LEDs</label><p id="map-quality" class="small"></p>
+  <div class="actions"><button id="save-map" class="primary" disabled>Save positions to ESP32</button><button id="send-effect" disabled>Play on lights</button><button id="export-map" disabled>Download positions</button></div></div></div>
+</section>
+</main><footer><span>LED 3D · Toit + ESP32</span><span>Video processing stays in your browser.</span><a href="https://github.com/floitsch/led-3d">Source code ↗</a></footer>
+<script type="module" src="app.js"></script>
+</body></html>

@@ -1,0 +1,76 @@
+name: Test, build firmware, and publish
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: toitlang/action-setup@v1
+        with:
+          toit-version: v2.0.0-alpha.199
+      - name: Install pinned Toit dependencies
+        run: toit pkg --project-root firmware install
+      - name: Validate firmware and model
+        run: |
+          toit analyze -Werror firmware/src/main.toit firmware/tests/model-test.toit firmware/tests/controller-test.toit
+          python3 scripts/test-firmware.py
+      - name: Build matching release firmware
+        run: |
+          mkdir -p build/envelopes
+          for chip in esp32 esp32s3; do
+            curl --fail --location --retry 3 "https://github.com/toitlang/envelopes/releases/download/v2.0.0-alpha.199/firmware-${chip}.envelope.gz" -o "build/envelopes/${chip}.gz"
+            gunzip "build/envelopes/${chip}.gz"
+            python3 scripts/build-firmware.py --envelope "build/envelopes/${chip}"
+          done
+      - name: Test browser computation and provisioning
+        run: npm test
+      - name: Install latest stable Google Chrome and browser test tools
+        run: |
+          pip install --upgrade playwright
+          playwright install --with-deps --force chrome
+      - name: Exercise browser UI
+        run: python3 scripts/browser-check.py
+      - name: Package static site
+        run: npm run build
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: validation-and-firmware
+          path: |
+            build/browser/
+            build/*/main.snapshot
+            web/firmware/
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+  deploy:
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/deploy-pages@v4
+        id: deployment

@@ -1,0 +1,10 @@
+import {cp,mkdir,rm,readdir,readFile} from 'node:fs/promises';
+import {execFileSync} from 'node:child_process';
+await rm('dist',{recursive:true,force:true});await mkdir('dist');
+await cp('web','dist',{recursive:true});
+for(const file of ['LICENSE','README.md','THIRD_PARTY.md'])await cp(file,`dist/${file}`).catch(e=>{if(e.code!=='ENOENT')throw e;});
+const files=await readdir('web/firmware').catch(()=>[]);
+if(!files.includes('index.json'))console.warn('No firmware bundles built: the installer will require an imported bundle.');
+else console.log('Firmware targets:',Object.keys(JSON.parse(await readFile('web/firmware/index.json','utf8')).chips).join(', '));
+execFileSync('python3',['scripts/package-source.py'],{stdio:'inherit'});
+console.log('Static site ready in dist/');
